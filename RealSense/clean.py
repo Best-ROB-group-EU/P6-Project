@@ -12,7 +12,7 @@ import time
 class D435:
     def __init__(self):
 
-        bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-15 11:52:12.810523.bag'
+        bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:32:35.477621_REAL.bag'
 
         self.pipeline = rs.pipeline()
         config = rs.config()
@@ -27,11 +27,12 @@ class D435:
 
         playback = device.as_playback()
         playback.set_real_time(False)
+
         self.pipeline.start(config)
     def video(self):
         align_to = rs.stream.color
         align = rs.align(align_to)
-        for i in range(10):
+        for i in range(28):
             self.pipeline.wait_for_frames()
         while True:
             frames = self.pipeline.wait_for_frames()
@@ -50,26 +51,29 @@ class D435:
             #Intrinsic camera parameters (in this case color = depth, as the frames are aligned)
             self.depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 
+
            # depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)  #A colorized depth image of the area.
 
 
-            #self.depth_distance(630,306)
+            self.depth_distance(58,405)
+           # self.depth_distance(104,407)
 
-            color_cvt = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
-            self.show(color_cvt)
+            #color_cvt = cv2.cvtColor(color_image, cv2.COLOR_BGR2RGB)
+
+            self.show(color_image)
 
             break
-
     def depth_distance(self, x, y):
         depth_intrin = self.depth_intrin
         udist = self.depth_frame.get_distance(x, y)  # in meters
         point = rs.rs2_deproject_pixel_to_point(depth_intrin, [x, y], udist) #Pixels -> 3D point cloud projection
         point_array = np.asanyarray(point) #appending to a numpy array due to the formating of .ply
 
-        '''
+        #print(point)
+
         #--- For testing purposes ---#
         udist_test = self.depth_frame.get_distance(50, 74)
-        test_point = [-0.34367, 0.15839,  0.962]
+        test_point = [-0.4472, 0.39715,  1.235]
         
         #TODO: Cords [536, 96] IS IT MAPPED?
 
@@ -82,12 +86,12 @@ class D435:
 
         test_pixel = rs.rs2_deproject_pixel_to_point(depth_intrin, [630, 306], udist)
 
-        print(test_pixel)
+        #print(test_pixel)
         #print(udist_test)
         print(test_point_pixel)
         #print("DISTANCE: {0}".format(udist))
         # print(point_to_pixel)
-        '''
+
         return point_array
 
     def rectangle_pointcloud(self, start_x1, start_y1, end_x1, end_y1):
@@ -159,7 +163,7 @@ class D435:
         path = "/home/vdr/Desktop/RealSense/great_pointcloud_path/" + str(datetime.datetime.now())
         pcd_poly = o3d.geometry.PointCloud()
         pcd_poly.points = o3d.utility.Vector3dVector(points)
-        o3d.io.write_point_cloud(path + ".ply", pcd_poly)
+        o3d.io.write_point_cloud(path + "_REAL" + ".ply", pcd_poly)
         #o3d.visualization.draw_geometries([pcd_poly])
 
 
@@ -169,7 +173,8 @@ class D435:
         img_copy = copy.copy(self.img_origin)
 
         #self.polygon(133, 389, 140, 220, 248, 282, 229, 391)
-        #self.polygon(270, 115, 486, 96, 536, 256, 333, 288)
+        self.polygon(111, 293, 314, 292, 318, 440, 38, 444)
+        #self.polygon(38,444, 54, 400, 155, 400, 150, 447)
         #self.polygon(104, 337, 406, 12, 630, 306, 238, 432)
 
         while True:
@@ -203,19 +208,62 @@ class To_bag:
             self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
         path = '/home/vdr/Desktop/RealSense/great_bag_path/' + str(datetime.datetime.now())
         self.config.enable_record_to_file(path + "_REAL" + '.bag')
+
         self.pipeline.start(self.config)
 
     def video(self):
-        for i in range(30):
+        for i in range(50):
             self.pipeline.wait_for_frames()
             print("Frame: {}".format(i))
         self.pipeline.stop()
         print("Capture completed")
 
+class To_JPG:
+    def __init__(self):
+        bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:47:55.060879_REAL.bag'
+
+        self.pipeline = rs.pipeline()
+        config = rs.config()
+
+        # From a bag file
+        config.enable_device_from_file(bag, False)
+        config.enable_all_streams()
+
+        pipeline_wrapper = rs.pipeline_wrapper(self.pipeline)
+        pipeline_profile = config.resolve(pipeline_wrapper)
+        device = pipeline_profile.get_device()
+
+        playback = device.as_playback()
+        playback.set_real_time(False)
+
+        self.path = '/home/vdr/Desktop/RealSense/JPGs/'
+
+        self.pipeline.start(config)
+    def stream(self):
+        try:
+            align_to = rs.stream.color
+            align = rs.align(align_to)
+            i = 0
+            while True:
+                frames = self.pipeline.wait_for_frames()
+                #Pre-processing, aligning frames, such that they match.
+                aligned_frames = align.process(frames)
+                color_frame = aligned_frames.get_color_frame()
+                depth_frame = aligned_frames.get_depth_frame()
+
+                color_image = np.asanyarray(color_frame.get_data())
+
+                cv2.imwrite(self.path + str(datetime.datetime.now()) + "_FRAMEID: " + str(i) + ".jpg", color_image)
+                i += 1
+        finally:
+            pass
+            print("Export completed")
+
 
 if __name__ == "__main__":
     #To_bag().video()
     D435().video()
+    #To_JPG().stream()
 
 
 
