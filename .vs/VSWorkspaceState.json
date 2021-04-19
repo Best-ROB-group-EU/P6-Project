@@ -1,7 +1,8 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\training_data"
   ],
-  "SelectedNode": "\\main.py",
+  "SelectedNode": "\\canny_thresholder.py",
   "PreviewInSolutionExplorer": false
 }

@@ -5,7 +5,10 @@ from matplotlib import pyplot as plt
 
 depth_img = np.load('colour.npy')
 img = cv2.cvtColor(depth_img, cv2.COLOR_BGR2RGB)
-cv2.imshow("Depth_img", depth_img)
+canny = cv2.Canny(img, 100, 200)
+canny_RGB = cv2.cvtColor(canny, cv2.COLOR_BGR2RGB)
+cv2.putText(canny_RGB, "Threshold: (100, 200)", (30,30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (40,40,255),2)
+cv2.imshow("Depth_img", canny_RGB)
 
 """ col_array = np.load("colour.npy")
 depth_array = np.load("depth.npy")
