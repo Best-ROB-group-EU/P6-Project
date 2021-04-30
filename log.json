@@ -1,0 +1,37 @@
+{
+    "meta" : [
+        {
+            "entries" : "0",
+            "objects" : ["depressions", "missing joint material", "edges"]
+        }
+    ],
+
+    "edges" : [
+        {
+            "timestamp" : "14:19",
+            "date" : "30/04/2021",
+            "location" : ["lat", "long"],
+            "file" : "example.jpg",
+            "path" : "/Documents/Git/P6-Project/log"
+        }
+
+    ],
+
+    "depressions" : [
+        {
+            "timestamp" : "14:21",
+            "date" : "30/04/2021",
+            "location" : ["lat", "long"],
+            "file" : "example2.jpg",
+            "path" : "/Documents/Git/P6-Project/log"
+        },
+        {
+            "timestamp" : "14:35",
+            "date" : "30/04/2021",
+            "location" : ["lat", "long"],
+            "file" : "example3.jpg",
+            "path" : "/Documents/Git/P6-Project/log"
+        }
+    ]
+}
+
