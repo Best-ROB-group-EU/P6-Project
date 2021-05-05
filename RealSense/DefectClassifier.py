@@ -23,7 +23,7 @@ class D435_live:
         '''
         #----------BAG-----------#
 
-        # bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-28 13:16:10.086458_REAL.bag'
+        #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/spot3.bag'
         bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:32:35.477621_REAL.bag'
         # bag = r'/home/vdr/Documents/spot_backyard_2021-03-25-09-48-00.bag'
 
@@ -90,8 +90,11 @@ class D435_live:
             points.append(self.depth_distance(stacked[0][i][1], stacked[0][i][0]))
 
         self.to_point_cloud_o3d(points)
-        self.depth_fit_check(118, 294)
-        '''
+        diff = self.depth_fit_check(118, 294) - self.depth_fit_check(119, 288) #119, 288
+        print("Depth difference: {0} cm".format(diff*100))
+        stop = time.time() - start_time
+        print("Execution time: {}".format(stop))
+
         while True:
             #cv2.drawContours(new_img, [rectangle], -1, 255, thickness=cv2.FILLED)
             cv2.drawContours(img_copy, [rectangle], -1, 255, thickness=cv2.FILLED)
@@ -102,9 +105,6 @@ class D435_live:
             if key & 0xFF == ord('q') or key == 27:
                 cv2.destroyAllWindows()
                 break
-        '''
-        stop = time.time() - start_time
-        print("Execution time: {}".format(stop))
 
     def to_point_cloud_o3d(self, points):
         pcd_poly = o3d.geometry.PointCloud()
@@ -142,7 +142,7 @@ class D435_live:
 
         New_A = np.asarray([A[0], A[1], z])
 
-        print("Difference: ", test[2]-New_A[2])
+        #print("Difference: ", (test[2]-New_A[2]) * 100, " cm")
         return z
 
 if __name__ == "__main__":
