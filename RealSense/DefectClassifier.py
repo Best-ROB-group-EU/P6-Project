@@ -24,7 +24,7 @@ class D435_live:
         #----------BAG-----------#
 
         #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/spot3.bag'
-        bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:32:35.477621_REAL.bag'
+        bag = r'E:\GitHub\P6-Project\RealSense\great_bag_path\477621_REAL.bag'
         # bag = r'/home/vdr/Documents/spot_backyard_2021-03-25-09-48-00.bag'
 
         self.pipeline = rs.pipeline()
@@ -46,7 +46,7 @@ class D435_live:
     def video(self):
         align_to = rs.stream.color
         align = rs.align(align_to)
-        for i in range(28):
+        for i in range(58):
             self.pipeline.wait_for_frames()
         while True:
             frames = self.pipeline.wait_for_frames()
@@ -64,7 +64,7 @@ class D435_live:
             self.depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 
             #Feed from YOLACT goes to fast_polygon
-            self.fast_polygon(118, 294, 313, 293, 316, 441, 40, 445)
+            self.fast_polygon(118, 294, 313, 293, 316, 441, 40, 445) # top left, right then buttom right, left
             #self.fast_polygon(328, 294, 521, 295, 607, 439, 334, 445)
 
             break

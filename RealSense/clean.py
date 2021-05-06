@@ -12,7 +12,7 @@ import time
 class D435:
     def __init__(self):
 
-        bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:32:35.477621_REAL.bag'
+        bag = r'/great_bag_path/477621_REAL.bag'
 
         self.pipeline = rs.pipeline()
         config = rs.config()
