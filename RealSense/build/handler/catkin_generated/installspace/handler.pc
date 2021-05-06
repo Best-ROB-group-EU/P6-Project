@@ -1,0 +1,8 @@
+prefix=/home/frederik/Documents/Git/P6-Project/RealSense/install
+
+Name: handler
+Description: Description of handler
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

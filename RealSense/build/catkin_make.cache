@@ -1,0 +1,2 @@
+handler
+-DCATKIN_DEVEL_PREFIX=/home/frederik/Documents/Git/P6-Project/RealSense/devel -DCMAKE_INSTALL_PREFIX=/home/frederik/Documents/Git/P6-Project/RealSense/install -G Unix Makefiles

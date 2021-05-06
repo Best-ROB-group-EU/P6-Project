@@ -24,7 +24,7 @@ class D435_live:
         #----------BAG-----------#
 
         #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/spot3.bag'
-        bag = r'E:\GitHub\P6-Project\RealSense\great_bag_path\477621_REAL.bag'
+        bag = r'/home/frederik/Documents/Git/P6-Project/RealSense/great_bag_path/477621_REAL.bag'
         # bag = r'/home/vdr/Documents/spot_backyard_2021-03-25-09-48-00.bag'
 
         self.pipeline = rs.pipeline()
