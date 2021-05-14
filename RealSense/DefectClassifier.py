@@ -10,7 +10,6 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 
-
 class D435_live:
     def __init__(self):
         '''
@@ -50,15 +49,29 @@ class D435_live:
         playback.set_real_time(False)
 
         self.pipeline.start(config)
-        self.pub = rospy.Publisher('image_publisher', Image, queue_size=1)
-        rospy.init_node('D435_Image_Publisher', anonymous=True)
-        self.rate = rospy.Rate(1)  # 10hz
+        self.pub = rospy.Publisher('image', Image, queue_size=1)
+        rospy.init_node('D435_Image_Publisher', anonymous=True, disable_signals =True)
+        self.rate = rospy.Rate(0.1)  # 10hz
+        #self.sub = rospy.Subscriber('image_publisher', Image, self.callback)
+
 
     def img_publisher(self, image):
         bridge = CvBridge()
         imgMsg = bridge.cv2_to_imgmsg(image, "bgr8")
-        rospy.loginfo(imgMsg)
+        #rospy.loginfo(imgMsg)
         self.pub.publish(imgMsg)
+
+
+    def callback(self, data):
+        current_frame = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+        cv2.imshow("Subscriber", current_frame)
+        key = cv2.waitKey(10)
+        if key & 0xFF == ord('q') or key == 27:
+            cv2.destroyAllWindows()
+            rospy.signal_shutdown("shutdown")
+        #TODO: Get corner msg, and pass it to self.fast_polygon(argument) function. There do the conversion to np.array if needed
+        #Now it runs as long as there are available frames
+
 
     def video(self):
         align_to = rs.stream.color
@@ -88,7 +101,7 @@ class D435_live:
 
             #self.fast_polygon()
 
-            break
+            #break
     def depth_distance(self, x, y):
         depth_intrin = self.depth_intrin
         udist = self.depth_frame.get_distance(x, y)  # in meters
