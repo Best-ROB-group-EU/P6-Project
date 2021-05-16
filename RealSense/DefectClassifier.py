@@ -1,9 +1,14 @@
+#!/usr/bin/env python
 import numpy as np
 import pyrealsense2 as rs
 import cv2
 import open3d as o3d
 import time
 import copy
+import rospy
+from std_msgs.msg import String
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge
 
 class D435_live:
     def __init__(self):
@@ -24,7 +29,9 @@ class D435_live:
         #----------BAG-----------#
 
         #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/spot3.bag'
-        bag = r'/home/frederik/Documents/Git/P6-Project/RealSense/great_bag_path/477621_REAL.bag'
+        #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-17 10:32:35.477621_REAL.bag'
+        bag = r'/home/vdr/Downloads/477621_REAL.bag'
+        #bag = r'/home/vdr/Desktop/RealSense/great_bag_path/2021-04-30 10:37:48.757190_REAL.bag'
         # bag = r'/home/vdr/Documents/spot_backyard_2021-03-25-09-48-00.bag'
 
         self.pipeline = rs.pipeline()
@@ -42,13 +49,36 @@ class D435_live:
         playback.set_real_time(False)
 
         self.pipeline.start(config)
+        self.pub = rospy.Publisher('image', Image, queue_size=1)
+        rospy.init_node('D435_Image_Publisher', anonymous=True, disable_signals =True)
+        self.rate = rospy.Rate(0.1)  # 10hz
+        #self.sub = rospy.Subscriber('image_publisher', Image, self.callback)
+
+
+    def img_publisher(self, image):
+        bridge = CvBridge()
+        imgMsg = bridge.cv2_to_imgmsg(image, "bgr8")
+        #rospy.loginfo(imgMsg)
+        self.pub.publish(imgMsg)
+
+
+    def callback(self, data):
+        current_frame = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
+        cv2.imshow("Subscriber", current_frame)
+        key = cv2.waitKey(10)
+        if key & 0xFF == ord('q') or key == 27:
+            cv2.destroyAllWindows()
+            rospy.signal_shutdown("shutdown")
+        #TODO: Get corner msg, and pass it to self.fast_polygon(argument) function. There do the conversion to np.array if needed
+        #Now it runs as long as there are available frames
+
 
     def video(self):
         align_to = rs.stream.color
         align = rs.align(align_to)
-        for i in range(58):
+        for i in range(28):
             self.pipeline.wait_for_frames()
-        while True:
+        while True and not rospy.is_shutdown():
             frames = self.pipeline.wait_for_frames()
             aligned_frames = align.process(frames)
             color_frame = aligned_frames.get_color_frame()
@@ -59,15 +89,19 @@ class D435_live:
 
             #Pixel values
             self.color_image = np.asanyarray(color_frame.get_data())
+
             depth_image = np.asanyarray(depth_frame.get_data())
 
             self.depth_intrin = depth_frame.profile.as_video_stream_profile().intrinsics
 
-            #Feed from YOLACT goes to fast_polygon
-            self.fast_polygon(118, 294, 313, 293, 316, 441, 40, 445) # top left, right then buttom right, left
-            #self.fast_polygon(328, 294, 521, 295, 607, 439, 334, 445)
+            self.img_publisher(self.color_image)
+            self.rate.sleep()
 
-            break
+            #Feed from YOLACT goes to fast_polygon
+
+            #self.fast_polygon()
+
+            #break
     def depth_distance(self, x, y):
         depth_intrin = self.depth_intrin
         udist = self.depth_frame.get_distance(x, y)  # in meters
@@ -75,10 +109,20 @@ class D435_live:
         point_array = np.asanyarray(point) #appending to a numpy array due to the formating of .ply
         return point_array
 
-    def fast_polygon(self, u1, v1, u2, v2, u3, v3, u4, v4):
+    def fast_polygon(self):
+       # 118, 294, 313, 293, 316, 441, 40, 445)
+        rectangle_a = []
+        mylist = ["1", [["118", "294"], ["313", "293"], ["316", "441"], ["40", "445"]]]
+
+        #mylist[0] for mask index
+
+        modified_list = [list(map(int, i)) for i in list(mylist[1])]
+        for i in modified_list:
+            rectangle_a.append(i)
+
+        rectangle = np.asarray(rectangle_a).astype("int32")
         img_copy = copy.copy(self.color_image)
         new_img = np.zeros((480, 640))
-        rectangle = np.array([[u1, v1], [u2, v2], [u3, v3], [u4, v4]], np.int32)
         start_time = time.time()
         cv2.drawContours(new_img, [rectangle], -1, 255, thickness=cv2.FILLED)
 
@@ -90,7 +134,7 @@ class D435_live:
             points.append(self.depth_distance(stacked[0][i][1], stacked[0][i][0]))
 
         self.to_point_cloud_o3d(points)
-        diff = self.depth_fit_check(118, 294) - self.depth_fit_check(119, 288) #119, 288
+        diff = self.depth_fit_check(328, 294) - self.depth_fit_check(313, 293) #119, 288
         print("Depth difference: {0} cm".format(diff*100))
         stop = time.time() - start_time
         print("Execution time: {}".format(stop))
@@ -146,7 +190,10 @@ class D435_live:
         return z
 
 if __name__ == "__main__":
-    D435_live().video()
+    try:
+        D435_live().video()
+    except rospy.ROSInterruptException:
+        pass
 
 
 
