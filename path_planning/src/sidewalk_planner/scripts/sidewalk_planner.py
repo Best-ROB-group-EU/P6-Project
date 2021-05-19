@@ -91,7 +91,7 @@ class Node:
         self.h = 0
         self.g = 0
         self.f = 0
-        self.backpointer = None
+        self.backpointer = self
 
     def __lt__(self, other):
         # Defines behaviour for the "less than" comparison operator
@@ -344,8 +344,7 @@ class PathPlanner:
         elif start_node_index == goal_node_index:
             path = [self.voronoi_diagram.vertices[start_node_index]]
         else:
-            # TODO: Update g to use length of backpointer path
-            g_func = lambda node: np.linalg.norm(node.position - self.voronoi_graph.nodes[start_node_index].position)
+            g_func = lambda node: np.linalg.norm(node.position - node.backpointer.position) + node.backpointer.g
             h_func = lambda node: np.linalg.norm(node.position - self.voronoi_graph.nodes[goal_node_index].position)
             path = a_star(self.voronoi_graph, g_func, h_func, start_node_index, goal_node_index)
 
