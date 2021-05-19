@@ -1,10 +1,13 @@
 import cv2
+import rospy
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial.transform import Rotation
+from geometry_msgs.msg import PoseStamped, Point, Quaternion
+from nav_msgs.msg import Path
 
 
 class Pose:
@@ -15,11 +18,22 @@ class Pose:
         self.x = position[0]
         self.y = position[1]
         self.z = 0
-        # Quaternion conversion
+        # Quaternion conversion from axis-angle
         self.q = Rotation.from_rotvec(orientation).as_quat()
 
-    def to_ros_msg(self):
-        raise NotImplemented
+    def to_ros_msg(self, frame="world"):
+        """
+        Convert Pose to ROS Pose message
+
+        :return: ROS Pose (geometry msg)
+        """
+        msg = PoseStamped()
+        msg.pose.position = Point(self.x, self.y, self.z)
+        msg.pose.orientation = Quaternion(self.q[0], self.q[1], self.q[2], self.q[3])
+        msg.header.frame_id = frame
+        msg.header.stamp = rospy.Time.now()
+        return msg
+
 
 
 class Plan:
@@ -30,13 +44,35 @@ class Plan:
         self.poses = list()
 
     def add_pose(self, pose):
+        """
+        Appends a new via-point to the path
+
+        :param pose: Pose
+        :return:
+        """
         self.poses.append(pose)
 
     def clear_plan(self):
-        self.poses.clear()
+        """
+        Clears the current plan
 
-    def to_ros_msg(self):
-        return
+        :return:
+        """
+        self.poses = []
+
+    def to_ros_msg(self, frame="world"):
+        """
+        Convert Plan to ROS Path message
+
+        :return: ROS Path (nav msg)
+        """
+        msg = Path()
+        for pose in self.poses:
+            msg.poses.append(pose.to_ros_msg(frame))
+
+        msg.header.frame_id = frame
+        msg.header.stamp = rospy.Time.now()
+        return msg
 
 
 class Node:
@@ -263,11 +299,11 @@ class PathPlanner:
         :return: start vertex index, goal vertex index
         """
         pts_in_sidewalk = self.get_vertices_in_sidewalk()
-        # For all vertices, if voronoi vertex is in sidewalk, find minimum distance to robots position
         # Assume robot position is at bottom-center of image
         # TODO: Interpolate bottom 2 points in vertex as robot position?
         robot_position = np.asarray([320, 480])
 
+        # Handles special cases: 0 or 1 Voronoi vertices only
         if len(pts_in_sidewalk) == 0:
             start, end = None, None
             return start, end
@@ -293,6 +329,7 @@ class PathPlanner:
 
         :return:
         """
+        self.plan.clear_plan()
         # Prepare Voronoi data structures
         self.compute_voronoi_diagram()
         self.generate_voronoi_graph()
@@ -318,7 +355,7 @@ class PathPlanner:
         else:
             self.plan.clear_plan()
             print("Error: No feasible path")
-            return
+            return False
 
         # Orientation at each point in the path
         for i in range(0, len(path)-1):
@@ -328,6 +365,9 @@ class PathPlanner:
             # At the final position in plan, use same orientation as for previous point
             if i == len(path)-2:
                 self.plan.add_pose(Pose(path[i+1], r))
+
+        # Successfully planned a path
+        return True
 
 
 def vector_angle(pt1, pt2):
@@ -340,6 +380,7 @@ def vector_angle(pt1, pt2):
     :return:    Vector rotation around z-axis (angle from x-axis)
     """
     v = pt2 - pt1
+    # u = [1, 0]
     return np.arccos(v[0]/(np.linalg.norm(v)))
 
 
@@ -397,7 +438,7 @@ def a_star(graph, g, h, start_node_key, goal_node_key):
                 adjacent_node.backpointer = current_node
 
             # If node is in open set, check if it has a lower cost than the current path
-            elif (open_set[open_set.index(adjacent_node)].f <= adjacent_node.f):
+            elif open_set[open_set.index(adjacent_node)].f <= adjacent_node.f:
                 # Update backpointer for path construction if current path has lower cost
                 adjacent_node.backpointer = current_node
 
@@ -419,28 +460,37 @@ def random_sampling(data, num_samples):
 
 def main():
     sidewalk_planner = PathPlanner()
-    pt1 = np.asarray([0, 470])
-    pt2 = np.asarray([620, 470])
-    pt3 = np.asarray([500, 100])
-    pt4 = np.asarray([100, 90])
-    test_poly = np.asarray([pt1, pt2, pt3, pt4])
+    plan_publisher = rospy.Publisher('plan', Path, queue_size=1)
+    #sidewalk_polygon_subscriber = rospy.Subscriber('sidewalk_polygon', Sidewalk)
+    rospy.init_node('sidewalk_planner')
 
-    sidewalk_planner.update_sidewalk(test_poly)
-    sidewalk_planner.plan_path()
+    while not rospy.is_shutdown():
+        pt1 = np.asarray([0, 470])
+        pt2 = np.asarray([620, 470])
+        pt3 = np.asarray([500, 100])
+        pt4 = np.asarray([100, 90])
+        test_poly = np.asarray([pt1, pt2, pt3, pt4])
 
-    # Draw lines
-    for i in range( len(sidewalk_planner.plan.poses) - 1 ):
-        pt1 = (int(np.round(sidewalk_planner.plan.poses[i].x,0)),
-               int(np.round(sidewalk_planner.plan.poses[i].y,0)))
-        pt2 = (int(np.round(sidewalk_planner.plan.poses[i+1].x,0)),
-               int(np.round(sidewalk_planner.plan.poses[i+1].y,0)))
-        if i == 0:
-            extra = (320, 480)
-            cv2.line(sidewalk_planner.sidewalk.sidewalk, extra, pt1, (0, 0, 255), thickness=2)
-        cv2.line(sidewalk_planner.sidewalk.sidewalk, pt1, pt2, (0, 0, 255), thickness=2)
-    
-    cv2.imshow("Tee hee", sidewalk_planner.sidewalk.sidewalk)
-    cv2.waitKey(0)
+        sidewalk_planner.update_sidewalk(test_poly)
+        planned = sidewalk_planner.plan_path()
+        if planned:
+            plan_publisher.publish(sidewalk_planner.plan.to_ros_msg())
+
+        # Draw lines
+        for i in range(len(sidewalk_planner.plan.poses) - 1):
+            pt1 = (int(np.round(sidewalk_planner.plan.poses[i].x, 0)),
+                   int(np.round(sidewalk_planner.plan.poses[i].y, 0)))
+            pt2 = (int(np.round(sidewalk_planner.plan.poses[i+1].x, 0)),
+                   int(np.round(sidewalk_planner.plan.poses[i+1].y, 0)))
+            if i == 0:
+                extra = (320, 480)
+                cv2.line(sidewalk_planner.sidewalk.sidewalk, extra, pt1, (0, 0, 255), thickness=2)
+            cv2.line(sidewalk_planner.sidewalk.sidewalk, pt1, pt2, (0, 0, 255), thickness=2)
+
+        cv2.imshow("Tee hee", sidewalk_planner.sidewalk.sidewalk)
+        cv2.waitKey(0)
+        rospy.loginfo("Iterated once!")
+
     print(1)
 
 
