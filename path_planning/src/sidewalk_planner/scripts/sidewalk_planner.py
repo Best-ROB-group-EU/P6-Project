@@ -8,6 +8,9 @@ from scipy.spatial.transform import Rotation
 
 
 class Pose:
+    """
+    Class for holding a robot pose, used for the plan
+    """
     def __init__(self, position, orientation):
         self.x = position[0]
         self.y = position[1]
@@ -15,8 +18,14 @@ class Pose:
         # Quaternion conversion
         self.q = Rotation.from_rotvec(orientation).as_quat()
 
+    def to_ros_msg(self):
+        raise NotImplemented
+
 
 class Plan:
+    """
+    Class for holding and manipulating a planned path
+    """
     def __init__(self):
         self.poses = list()
 
@@ -164,6 +173,9 @@ class SidewalkPolygon:
 
 
 class PathPlanner:
+    """
+    Class for Voronoi based path planning with A* graph search
+    """
     def __init__(self, image_dimensions=(480, 640, 3)):
         self.polygon_subscriber = None
         self.image_holder = np.zeros(image_dimensions, dtype="int8")
