@@ -138,9 +138,9 @@ class SidewalkPolygon:
     def fill_sidewalk(self, use_hull=True):
         self.sidewalk = np.zeros(self.sidewalk.shape)
         if use_hull:
-            cv2.drawContours(self.sidewalk, [self.hull], -1, 255, thickness=cv2.FILLED)
+            cv2.drawContours(self.sidewalk, [self.hull], -1, (255, 255, 255), thickness=cv2.FILLED)
         else:
-            cv2.drawContours(self.sidewalk, [self.vertices], -1, 255, thickness=cv2.FILLED)
+            cv2.drawContours(self.sidewalk, [self.vertices], -1, (255, 255, 255), thickness=cv2.FILLED)
 
     def compute_sidewalk_indices(self):
         self.sidewalk_indices = np.vstack(np.nonzero(self.sidewalk))
@@ -417,15 +417,15 @@ def main():
     sidewalk_planner.plan_path()
 
     # Draw lines
-    for i in range(sidewalk_planner.voronoi_diagram.vertices.shape[0] - 1):
-        if sidewalk_planner.voronoi_diagram.ridge_vertices[i][0] != -1:
-            j = sidewalk_planner.voronoi_diagram.ridge_vertices[i][0]
-            k = sidewalk_planner.voronoi_diagram.ridge_vertices[i][1]
-            pt1 = (int(np.round(sidewalk_planner.voronoi_diagram.vertices[j], 0)[0]),
-                   int(np.round(sidewalk_planner.voronoi_diagram.vertices[j], 0)[1]))
-            pt2 = (int(np.round(sidewalk_planner.voronoi_diagram.vertices[k], 0)[0]),
-                   int(np.round(sidewalk_planner.voronoi_diagram.vertices[k], 0)[1]))
-            cv2.line(sidewalk_planner.sidewalk.sidewalk, pt1, pt2, (0, 0, 255), thickness=2)
+    for i in range( len(sidewalk_planner.plan.poses) - 1 ):
+        pt1 = (int(np.round(sidewalk_planner.plan.poses[i].x,0)),
+               int(np.round(sidewalk_planner.plan.poses[i].y,0)))
+        pt2 = (int(np.round(sidewalk_planner.plan.poses[i+1].x,0)),
+               int(np.round(sidewalk_planner.plan.poses[i+1].y,0)))
+        if i == 0:
+            extra = (320, 480)
+            cv2.line(sidewalk_planner.sidewalk.sidewalk, extra, pt1, (0, 0, 255), thickness=2)
+        cv2.line(sidewalk_planner.sidewalk.sidewalk, pt1, pt2, (0, 0, 255), thickness=2)
     
     cv2.imshow("Tee hee", sidewalk_planner.sidewalk.sidewalk)
     cv2.waitKey(0)
