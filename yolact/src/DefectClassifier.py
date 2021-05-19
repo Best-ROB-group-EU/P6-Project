@@ -5,16 +5,20 @@ import cv2
 import open3d as o3d
 import time
 import copy
-import rospy
-from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from cv_bridge import CvBridge
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+#import rospy
+#from std_msgs.msg import String
+#from sensor_msgs.msg import Image
+#from cv_bridge import CvBridge
 import math
 
 transform = np.array([[0,   0.5736, -0.8192, -0.0500],
                       [1,   0,       0,       0     ],
-                      [0,  -0.8192, -0.5736,  0.8700],
+                      [0,  -0.8192, -0.5736,  0.9800],
                       [0,   0,       0,       1.0000]])
+
+tile1 = []
 
 
 class D435_live:
@@ -34,7 +38,7 @@ class D435_live:
         self.pipeline.start(config)
         '''
         #----------BAG-----------#
-        bag = r'/home/philip/Desktop/spot_trainingdata1/20210507_150607.bag'
+        bag = r'/home/vdr/Desktop/RealSense/good_data_test/EDGES_2.5_CM.bag'
 
         self.pipeline = rs.pipeline()
         config = rs.config()
@@ -51,19 +55,20 @@ class D435_live:
         playback.set_real_time(False)
 
         self.pipeline.start(config)
-        self.pub = rospy.Publisher('image', Image, queue_size=1)
-        rospy.init_node('D435_Image_Publisher', anonymous=True, disable_signals =True)
-        self.rate = rospy.Rate(1)  # 10hz
+        #self.pub = rospy.Publisher('image', Image, queue_size=1)
+        #rospy.init_node('D435_Image_Publisher', anonymous=True, disable_signals =True)
+        #self.rate = rospy.Rate(1)  # 10hz
         #self.sub = rospy.Subscriber('image_publisher', Image, self.callback)
 
-
+    '''
     def img_publisher(self, image):
         bridge = CvBridge()
         imgMsg = bridge.cv2_to_imgmsg(image, "bgr8")
         #rospy.loginfo(imgMsg)
         self.pub.publish(imgMsg)
+    '''
 
-
+    '''
     def callback(self, data):
         current_frame = np.frombuffer(data.data, dtype=np.uint8).reshape(data.height, data.width, -1)
         cv2.imshow("Subscriber", current_frame)
@@ -73,16 +78,16 @@ class D435_live:
             rospy.signal_shutdown("shutdown")
         #TODO: Get corner msg, and pass it to self.fast_polygon(argument) function. There do the conversion to np.array if needed
         #Now it runs as long as there are available frames
-
+    '''
     #def edge_detection(self):
 
 
     def video(self):
         align_to = rs.stream.color
         align = rs.align(align_to)
-        for i in range(1267):
+        for i in range(30):
             self.pipeline.wait_for_frames()
-        while True and not rospy.is_shutdown():
+        while True: #and not rospy.is_shutdown():
             frames = self.pipeline.wait_for_frames()
             aligned_frames = align.process(frames)
             color_frame = aligned_frames.get_color_frame()
@@ -104,7 +109,8 @@ class D435_live:
             #Feed from YOLACT goes to fast_polygon:
 
             #Image 1267, from 20210507_150607.bag
-            tiles = [[1, [[300, 203], [61, 216], [0, 308], [0, 479], [275, 479]]], [2, [[639, 216], [563, 117], [372, 123], [392, 280], [639, 280]]], [3, [[389, 280], [412, 479], [639, 479], [639, 282]]], [4, [[68, 207], [299, 200], [307, 98], [151, 84]]]]
+            #tiles = [[1, [[300, 203], [61, 216], [0, 308], [0, 479], [275, 479]]], [2, [[639, 216], [563, 117], [372, 123], [392, 280], [639, 280]]], [3, [[389, 280], [412, 479], [639, 479], [639, 282]]], [4, [[68, 207], [299, 200], [307, 98], [151, 84]]]]
+            tiles = [[1, [[355, 303], [352, 201], [506, 198], [550, 301]]], [2, [[356, 313],[551, 314], [615, 478], [348, 479]]]]
             ruler_region = [[19, 380], [639, 380], [639, 350], [19, 350]]
 
 
@@ -124,8 +130,30 @@ class D435_live:
                 if not "Low severity" in depression_defects[i]:
                     print(depression_defects[i][2], "depression defect detected at", depression_defects[i][0], "with size:", depression_defects[i][1],"cm")
                     #Save image with tags, maybe draw circle in current image at this pos
-
             ###################################
+            '''
+            while True:
+                cv2.imshow("Original stream", self.color_image)
+                key = cv2.waitKey(10)
+                if key & 0xFF == ord('q') or key == 27:
+                    cv2.destroyAllWindows()
+                    break
+            '''
+            #print(tile1)
+            fig = plt.figure(figsize=plt.figaspect(0.5))
+            #fig.ylim([-1, 1])
+            #fig.xlim([-1, 1])
+            #ax = plt.subplot(111, projection='3d')
+            ax = fig.add_subplot(1,2,1, projection='3d')
+            # plt.subplot(1,2,1)
+            ax.scatter(tile1[0][0], tile1[0][1], tile1[0][2], color='b')
+            ax.set_zlim([0, 0.5])
+            ax = fig.add_subplot(1,2,2, projection ='3d')
+            ax.scatter(tile1[1][0], tile1[1][1], tile1[1][2], color='g')
+            ax.set_zlim([0, 0.5])
+            plt.show()
+
+
             break
 
 
@@ -144,10 +172,9 @@ class D435_live:
         for i in range(len(list)):
             current_set = list[i]
             corners = current_set[1]
-            rectangle_a = [[300, 203], [61, 216], [0, 308], [0, 479], [275, 479]]
 
             rectangle = np.asarray(corners).astype("int32")
-            img_copy = copy.copy(self.color_image) # is this needed for something?
+
             new_img = np.zeros((480, 640))
             cv2.drawContours(new_img, [rectangle], -1, 255, thickness=cv2.FILLED)
 
@@ -158,7 +185,8 @@ class D435_live:
             for j in range(0, stacked.shape[1], int(stacked.shape[1]/2000)):
                 point3d = self.depth_distance(stacked[0][j][1], stacked[0][j][0])
                 point3d = np.append(point3d, 1)
-                t_point = transform.dot(point3d)
+                t_point = np.matmul(transform,point3d)
+                #points.append([point3d[0], point3d[1], point3d[2]])
                 points.append([t_point[0], t_point[1], t_point[2]])
 
             self.to_point_cloud_o3d(points)
@@ -308,8 +336,8 @@ class D435_live:
 
 
 
-
     def linear_fit(self, pcd_poly):
+
         point_cloud = pcd_poly
 
         downpcd = point_cloud.voxel_down_sample(voxel_size = 0.02)
@@ -330,8 +358,27 @@ class D435_live:
         A = np.matrix(tmp_A)
 
         self.fit = (A.T * A).I * A.T * b
+        Fit_linear = A*self.fit
         errors = b - A * self.fit
-        self.residual = np.linalg.norm(errors)
+        #self.residual = np.linalg.norm(errors)
+        tile1.append([x, y, Fit_linear])
+
+        #fig = plt.figure(figsize=plt.figaspect(0.5))
+        '''
+        plt.figure()
+        plt.ylim([-1, 1])
+        plt.xlim([-1, 1])
+        ax = plt.subplot(111, projection ='3d')
+        #ax = fig.add_subplot(1,2,1, projection='3d')
+        #plt.subplot(1,2,1)
+        ax.scatter(x, y, z, color ='b')
+        ax.set_zlim([-1, 1])
+        #ax = fig.add_subplot(1,2,2, projection ='3d')
+        ax.scatter(x, y, Fit_linear, color ='g')
+        ax.set_zlim([-1, 1])
+        plt.show()
+        '''
+
 
 
     def depth_fit_check(self, u, v):
@@ -341,7 +388,7 @@ class D435_live:
         return z
 
 if __name__ == "__main__":
-
+    D435_live().video()
     #read from bag for image and depth
     ##store image as jpg for yolact
 
@@ -368,11 +415,12 @@ if __name__ == "__main__":
     #
 
 
-
+    '''
     try:
         D435_live().video()
     except rospy.ROSInterruptException:
         pass
+    '''
     """
 
 def polygon(self, u1, v1, u2, v2, u3, v3, u4, v4): # 4 points: [u1, v1], [u2, v2], [u3,v3], [u4,v4]
