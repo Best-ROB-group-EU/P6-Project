@@ -1,14 +1,77 @@
+import copy
 import cv2
 import rospy
 
 import numpy as np
 import matplotlib.pyplot as plt
+import shapely.geometry
 
 from scipy.spatial import Voronoi, voronoi_plot_2d
 from scipy.spatial.transform import Rotation
 from geometry_msgs.msg import PoseStamped, Point, Quaternion
 from nav_msgs.msg import Path
+from shapely.geometry import Polygon
+from shapely.affinity import affine_transform
+from shapely.ops import unary_union
+from descartes.patch import PolygonPatch
 
+# =================== TEST DATA ===================
+# gods of code, forgive me
+sidewalk_xyz = [
+                [[-0.5321995102478504, -0.41964998841285706, 0.10618141478346277],
+                 [-2.886153137049627, -0.39940157532691956, 0.023984670175945674],
+                 [-2.744444110101366, 0.3892264664173126, 0.036385390580021354],
+                 [-0.5224942166309238, 0.42163586616516113, 0.11445887927434531]],
+                [[-0.5338384779075265, -0.4961068034172058, 0.10834945562653985],
+                 [-1.7252574782967567, -1.0032498836517334, 0.03793246742350888],
+                 [-3.1143489551057817, -0.9654291868209839, -0.03830431833527673],
+                 [-2.828329564472914, 1.0819342136383057, -0.0034526448121308395],
+                 [-2.0554307251613855, 1.0957368612289429, 0.03929073183729277],
+                 [-0.5189747752098323, 0.46524325013160706, 0.11812886696723748]],
+                [[-0.5230751141008854, -0.48507052659988403, 0.111686882451389],
+                 [-1.5696194292607366, -0.9344045519828796, 0.04463284272768865],
+                 [-3.0850397580247875, -0.8590090274810791, -0.04616624466084465],
+                 [-2.892001712445879, 1.1431313753128052, -0.017152857357758317],
+                 [-2.3207915847876786, 1.2004801034927368, 0.017816040930678734],
+                 [-0.5184622394742608, 0.4647347927093506, 0.12020259798311891]],
+                [[-0.5338384779075265, -0.4961068034172058, 0.07069543810382112],
+                 [-0.9994692667726784, -0.7036938667297363, 0.0278212777354519],
+                 [-3.4296777254588604, 0.017446212470531464, -0.12800394146838928],
+                 [-2.865724254997873, 1.416576623916626, -0.03286500098313916],
+                 [-0.5215374803909302, 0.4677855670452118, 0.10791233601485553]],
+                [[-0.5574153676196575, -0.5202814936637878, 0.04957367762246881],
+                 [-1.0632871545127571, -0.7509921193122864, -0.02609741363589113],
+                 [-4.136135639610576, 0.021093012765049934, -0.4093661359870106],
+                 [-3.7055904628924368, 1.8391090631484985, -0.2879717902288546],
+                 [-0.5415265934508204, 0.4876156151294708, 0.0871169278100288]]
+                ]
+
+yolact_xyz = [
+              [[-2.931417821991634, -0.40955430269241333, 0.022304623410251925],
+               [-0.5261503550175548, -0.41155725717544556, 0.10646949103954152],
+               [-0.5210249446553588, 0.4167163074016571, 0.11446388593349763],
+               [-2.744444110101366, 0.38491249084472656, 0.03634468694069817]],
+              [[-2.948743619984674, -0.9763625264167786, -0.029275362989610976],
+               [-0.533325915668714, -0.48032206296920776, 0.10852483180625636],
+               [-0.5184622394742608, 0.4573398530483246, 0.11808346577517624],
+               [-2.828329564472914, 0.9395885467529297, -0.004779321262284364]],
+              [[-2.5040184261524914, -1.2350213527679443, -0.014363649521535904],
+               [-0.5230751141008854, -0.4507187306880951, 0.11198480382587574],
+               [-0.5174371871596812, 0.43567854166030884, 0.1200124631724468],
+               [-2.658076406496906, 1.0060733556747437, -0.004224531502937556]],
+              [[-3.293334404801654, -1.7111479043960571, -0.1828202111042463],
+               [-2.043809831954801, -0.325825035572052, -0.03658281959871715],
+               [-0.5642592781546354, -0.5087196826934814, 0.0679301051894702],
+               [-0.5551522402390838, 0.4472115933895111, 0.10460678547602505],
+               [-2.764400091923022, 1.2753239870071411, -0.030554247421916342]],
+              [[-2.902859302308464 -1.50513756275177, -0.2982898820416094],
+               [-2.2291959778975965, -0.3561205267906189, -0.16793629920681497],
+               [-0.5876347136773705, -0.5318433046340942, 0.04513132670221673],
+               [-0.5727181178234935, 0.46276265382766724, 0.08207763546152186],
+               [-3.36306233717432, 1.5565972328186035, -0.25215301419465924]]
+              ]
+
+# ================= TEST DATA END =================
 
 class Pose:
     """
@@ -19,6 +82,7 @@ class Pose:
         self.y = position[1]
         self.z = 0
         # Quaternion conversion from axis-angle
+        self.theta = orientation[2]
         self.q = Rotation.from_rotvec(orientation).as_quat()
 
     def to_ros_msg(self, frame="map"):
@@ -187,10 +251,14 @@ class SidewalkPolygon:
         self.vertices = list()
         self.hull = np.asarray([0, 0])
         self.sidewalk = np.zeros(grid_dimensions)
+        self.poly = Polygon()
         self.sidewalk_indices = None
 
     def set_vertices(self, v):
         self.vertices = v
+        # OpenCV data type error fix
+        if self.vertices.dtype == 'float64':
+            self.vertices = np.float32(self.vertices)
 
     def compute_sidewalk_outline(self):
         self.hull = cv2.convexHull(self.vertices)
@@ -203,10 +271,15 @@ class SidewalkPolygon:
         :return:
         """
         self.sidewalk = np.zeros(self.sidewalk.shape)
+        # Datatype fix for cv and shapely compatibility/indifference
+        pts = self.vertices
         if use_hull:
-            cv2.drawContours(self.sidewalk, [self.hull], -1, (255, 255, 255), thickness=cv2.FILLED)
+            pts = self.hull
+
+        if self.vertices.dtype == 'float32':
+            self.poly = Polygon(pts)
         else:
-            cv2.drawContours(self.sidewalk, [self.vertices], -1, (255, 255, 255), thickness=cv2.FILLED)
+            cv2.drawContours(self.sidewalk, [pts], -1, (255, 255, 255), thickness=cv2.FILLED)
 
     def compute_sidewalk_indices(self):
         self.sidewalk_indices = np.vstack(np.nonzero(self.sidewalk))
@@ -220,7 +293,10 @@ class SidewalkPolygon:
         :return:
         """
         pixel = (int(round(pt[0], 0)), int(round(pt[1], 0)))
-        if use_hull:
+        if self.vertices.dtype == 'float32':
+            p = shapely.geometry.Point(pt)
+            return self.poly.contains(p)
+        elif use_hull:
             if cv2.pointPolygonTest(self.hull, pixel, False) >= 0:
                 return True
             else:
@@ -502,25 +578,103 @@ def random_sampling(data, num_samples):
     return data[random_sample, :]
 
 
+def path_coverage(path, coverage_polygon, yolact_sidewalk, ground_truth):
+    """
+    Calculates approximate coverage of sidewalk
+
+    :param path:             Planned path
+    :param coverage_polygon: Approximate defect detector coverage in single frame
+    :param yolact_sidewalk:  Sidewalk polygon as hypothesized by YOLACT
+    :param ground_truth:     Ground truth sidewalk to calculate coverage of
+    :rtype:                  float
+    :return coverage:        The coverage ratio [0.0 : 1.0]
+    """
+    lookahead = 0.5
+    cover = Polygon(np.asarray([[0.52, 1.08/2], [0.52, -1.08/2], [1.02, -1.84/2], [1.02, 1.84/2]]))
+    sidewalk_poly = Polygon(ground_truth)
+    yolact_poly = Polygon(yolact_sidewalk)
+
+    path_points = list()
+    for pose in path.poses:
+        path_points.append(np.asarray([pose.x, pose.y]))
+    path_points.insert(0, np.asarray([0, 0]))
+    robot_start_pose = Pose([0, 0],
+                            [0, 0, vector_angle(path_points[0], path_points[1])]
+                            )
+
+    path_copy = copy.deepcopy(path)
+    path_copy.poses.insert(0, robot_start_pose)
+    coverage_frames = list()
+
+    for i in range(0, len(path_copy.poses)-1):
+        # Interpolate the current path section
+        x_range = np.linspace(path_copy.poses[i].x, path_copy.poses[i+1].x, 100, endpoint=True)
+        y_range = np.linspace(path_copy.poses[i].y, path_copy.poses[i+1].y, 100, endpoint=True)
+        # Compute cover position at each point
+        for j in range(0, len(x_range)):
+            # See shapely documentation for explanation of formatting
+            transform_matrix = [np.cos(path_copy.poses[i].theta),
+                                -np.sin(path_copy.poses[i].theta),
+                                np.sin(path_copy.poses[i].theta),
+                                np.cos(path_copy.poses[i].theta),
+                                x_range[j],
+                                y_range[j]]
+            coverage_frames.append(affine_transform(cover, transform_matrix))
+
+
+    total_cover = unary_union(coverage_frames)
+    covered_sidewalk = sidewalk_poly.intersection(total_cover)
+
+    # Plotting
+    sp = PolygonPatch(sidewalk_poly, facecolor=(1, 0, 0, 0.3))
+    yp = PolygonPatch(yolact_poly, facecolor=(0, 0.5, 0, 0.3))
+    cp = PolygonPatch(covered_sidewalk, facecolor=(0,0,1,0.3))
+    tcp = PolygonPatch(total_cover, facecolor=(1,0,0,1))
+    # TODO: Split in multiple subplots
+    fig, ax = plt.subplots()
+    ax.plot([x for x,y in path_points], [y for x,y in path_points], 'blue', linestyle='--')
+    ax.add_patch(sp)
+    ax.add_patch(yp)
+    ax.add_patch(tcp)
+    ax.add_patch(cp)
+    ax.autoscale_view()
+    ax.set_aspect('equal')
+    plt.show()
+
+    coverage = covered_sidewalk.area / sidewalk_poly.area
+    return coverage
+
+
 def main():
     sidewalk_planner = PathPlanner()
-    plan_publisher = rospy.Publisher('plan', Path, queue_size=1)
-    #sidewalk_polygon_subscriber = rospy.Subscriber('sidewalk_polygon', Sidewalk)
-    rospy.init_node('sidewalk_planner')
+
+    plan_publisher = rospy.Publisher('move_base/GlobalPlanner/global_plan', Path, queue_size=1)
+    hotfix_publisher = rospy.Publisher('move_base_simple/goal', PoseStamped, queue_size=1)
+    #rospy.init_node('sidewalk_planner')
+
+    test_i = 0
 
     while not rospy.is_shutdown():
-        pt1 = np.asarray([0, 470])
-        pt2 = np.asarray([620, 470])
-        pt3 = np.asarray([500, 100])
-        pt4 = np.asarray([100, 90])
-        test_poly = np.asarray([pt1, pt2, pt3, pt4])
+        ground_truth = np.asarray(sidewalk_xyz[test_i])[:,0:2]
+        yolact_extraction = np.asarray(yolact_xyz[test_i])[:,0:2]
+        test_i += 1
 
-        sidewalk_planner.update_sidewalk(test_poly)
+        sidewalk_planner.update_sidewalk(yolact_extraction)
         planned = sidewalk_planner.plan_path()
         if planned:
-            plan_publisher.publish(sidewalk_planner.plan.to_ros_msg())
+            coverage = path_coverage(sidewalk_planner.plan, None, yolact_extraction, ground_truth)
+            print(coverage)
+            # msg = sidewalk_planner.plan.to_ros_msg()
+            # plan_publisher.publish(msg)
+            """
+            # The shittiest hotfix of them all
+            for i in range(len(sidewalk_planner.plan.poses)):
+                hotfix_publisher.publish(sidewalk_planner.plan.poses[i].to_ros_msg())
+                f = input("Press a key when the current goal is reached to publish next via-point")
+            """
 
-        # Draw lines
+        # Draw lines (image space)
+        """
         for i in range(len(sidewalk_planner.plan.poses) - 1):
             pt1 = (int(np.round(sidewalk_planner.plan.poses[i].x, 0)),
                    int(np.round(sidewalk_planner.plan.poses[i].y, 0)))
@@ -532,8 +686,10 @@ def main():
             cv2.line(sidewalk_planner.sidewalk.sidewalk, pt1, pt2, (0, 0, 255), thickness=2)
 
         cv2.imshow("Tee hee", sidewalk_planner.sidewalk.sidewalk)
-        cv2.waitKey(0)
+        cv2.waitKey(1)
+        """
         rospy.loginfo("Iterated once!")
+        pause = input()
 
     print(1)
 
