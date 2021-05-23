@@ -21,11 +21,12 @@ class Pose:
         # Quaternion conversion from axis-angle
         self.q = Rotation.from_rotvec(orientation).as_quat()
 
-    def to_ros_msg(self, frame="world"):
+    def to_ros_msg(self, frame="map"):
         """
-        Convert Pose to ROS Pose message
+        Convert Pose to ROS PoseStamped message
 
-        :return: ROS Pose (geometry msg)
+        :param frame: Name of the ROS tf-frame
+        :return:      ROS Pose (geometry msg)
         """
         msg = PoseStamped()
         msg.pose.position = Point(self.x, self.y, self.z)
@@ -33,7 +34,6 @@ class Pose:
         msg.header.frame_id = frame
         msg.header.stamp = rospy.Time.now()
         return msg
-
 
 
 class Plan:
@@ -60,11 +60,12 @@ class Plan:
         """
         self.poses = []
 
-    def to_ros_msg(self, frame="world"):
+    def to_ros_msg(self, frame="map"):
         """
         Convert Plan to ROS Path message
 
-        :return: ROS Path (nav msg)
+        :param frame: Name of the ROS tf-frame
+        :return:      ROS Path (nav msg)
         """
         msg = Path()
         for pose in self.poses:
@@ -73,6 +74,21 @@ class Plan:
         msg.header.frame_id = frame
         msg.header.stamp = rospy.Time.now()
         return msg
+
+    def from_ros_msg(self, msg):
+        """
+        Create Plan given ROS Path msg
+
+        :param msg: The path message
+        :return:
+        """
+        for point in msg.poses:
+            position = [point.pose.position.x, point.pose.position.y, point.pose.position.z]
+            orientation = Rotation.from_quat([point.pose.orientation.x,
+                                              point.pose.orientation.y,
+                                              point.pose.orientation.z,
+                                              point.pose.orientation.w]).as_rotvec()
+            self.add_pose(Pose(position, orientation))
 
 
 class Node:
@@ -181,6 +197,11 @@ class SidewalkPolygon:
         self.hull = np.reshape(self.hull, (self.hull.shape[0], 2))
 
     def fill_sidewalk(self, use_hull=True):
+        """
+        For drawings in the image space [u,v]
+        :param use_hull:
+        :return:
+        """
         self.sidewalk = np.zeros(self.sidewalk.shape)
         if use_hull:
             cv2.drawContours(self.sidewalk, [self.hull], -1, (255, 255, 255), thickness=cv2.FILLED)
@@ -191,6 +212,13 @@ class SidewalkPolygon:
         self.sidewalk_indices = np.vstack(np.nonzero(self.sidewalk))
 
     def is_in_sidewalk(self, pt, use_hull=True):
+        """
+        Method for checking if a point is inside the sidewalk
+
+        :param pt:       Point to check geometry for
+        :param use_hull: Use convex hull as sidewalk polygon
+        :return:
+        """
         pixel = (int(round(pt[0], 0)), int(round(pt[1], 0)))
         if use_hull:
             if cv2.pointPolygonTest(self.hull, pixel, False) >= 0:
@@ -230,7 +258,7 @@ class PathPlanner:
         self.sidewalk.set_vertices(polygon)
         self.sidewalk.compute_sidewalk()
 
-    def compute_voronoi_diagram(self, augment=True, use_hull=True, plot=False):
+    def compute_voronoi_diagram(self, augment=False, use_hull=True, plot=True):
         """
         Computes the Voronoi diagram of the current sidewalk polygon
 
@@ -254,8 +282,8 @@ class PathPlanner:
 
         if plot:
             fig = voronoi_plot_2d(self.voronoi_diagram)
-            plt.ylim([-200, 800])
-            plt.xlim([-200, 800])
+            plt.ylim([-5, 5])
+            plt.xlim([-5, 5])
             plt.show()
 
     def generate_voronoi_graph(self):
@@ -301,7 +329,8 @@ class PathPlanner:
         pts_in_sidewalk = self.get_vertices_in_sidewalk()
         # Assume robot position is at bottom-center of image
         # TODO: Interpolate bottom 2 points in vertex as robot position?
-        robot_position = np.asarray([320, 480])
+        # robot_position = np.asarray([320, 480])
+        robot_position = np.asarray([0, 0])
 
         # Handles special cases: 0 or 1 Voronoi vertices only
         if len(pts_in_sidewalk) == 0:
@@ -327,7 +356,8 @@ class PathPlanner:
         positions and proceeds with an A* graph search to find a path between the nodes, before finally constructing the
         path by adding orientations to the positions.
 
-        :return:
+        :rtype: bool
+        :return: Returns true if a path was planned, otherwise False
         """
         self.plan.clear_plan()
         # Prepare Voronoi data structures
@@ -342,7 +372,7 @@ class PathPlanner:
         if start_node_index is None:
             path = None
         elif start_node_index == goal_node_index:
-            path = [self.voronoi_diagram.vertices[start_node_index]]
+            path = [self.voronoi_graph.nodes[start_node_index]]
         else:
             g_func = lambda node: np.linalg.norm(node.position - node.backpointer.position) + node.backpointer.g
             h_func = lambda node: np.linalg.norm(node.position - self.voronoi_graph.nodes[goal_node_index].position)
@@ -362,8 +392,14 @@ class PathPlanner:
             r = [0, 0, theta]
             self.plan.add_pose(Pose(path[i], r))
             # At the final position in plan, use same orientation as for previous point
+            # TODO: Use orientation of outgoing ridge
             if i == len(path)-2:
                 self.plan.add_pose(Pose(path[i+1], r))
+
+        if len(path) == 1:
+            theta = 0
+            r = [0, 0, theta]
+            self.plan.add_pose(Pose(path[0], r))
 
         # Successfully planned a path
         return True
@@ -389,7 +425,7 @@ def a_star(graph, g, h, start_node_key, goal_node_key):
 
     :param graph:           graph to search, expected to be of type Graph()
     :param g:               path length function, g(n1) = path_length(n1)
-    :param h:               heuristic function, h(n1) = cost_heuristic(n1)
+    :param h:               heuristic function, h(n1) = distance_to_goal(n1)
     :param start_node_key:  key for selecting start node in graph
     :param goal_node_key:   key for selecting goal node in graph
     :return:                nodes making up the path
