@@ -463,17 +463,27 @@ def a_star(graph, g, h, start_node_key, goal_node_key):
                 continue
 
             # Calculate cost of each adjacent node
-            adjacent_node.h = h(adjacent_node)
-            adjacent_node.g = g(adjacent_node)
-            adjacent_node.f = adjacent_node.h + adjacent_node.g
+            temp_h = h(adjacent_node)
+            temp_g = g(adjacent_node)
+            temp_f = temp_h + temp_g
 
             # Check if adjacent node is not in open set
             if adjacent_node not in open_set:
+                # Set the cost for future reference
+                adjacent_node.h = temp_h
+                adjacent_node.g = temp_g
+                adjacent_node.f = temp_f
+
                 open_set.append(adjacent_node)
                 adjacent_node.backpointer = current_node
 
             # If node is in open set, check if it has a lower cost than the current path
-            elif open_set[open_set.index(adjacent_node)].f <= adjacent_node.f:
+            elif open_set[open_set.index(adjacent_node)].f >= temp_f:
+                # Update the cost for future reference
+                adjacent_node.h = temp_h
+                adjacent_node.g = temp_g
+                adjacent_node.f = temp_f
+
                 # Update backpointer for path construction if current path has lower cost
                 adjacent_node.backpointer = current_node
 
