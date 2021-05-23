@@ -415,8 +415,7 @@ def vector_angle(pt1, pt2):
     :return:    Vector rotation around z-axis (angle from x-axis)
     """
     v = pt2 - pt1
-    # u = [1, 0]
-    return np.arccos(v[0]/(np.linalg.norm(v)))
+    return np.arctan2(v[1], v[0])
 
 
 def a_star(graph, g, h, start_node_key, goal_node_key):
