@@ -4,6 +4,7 @@ import rospy
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec
 import shapely.geometry
 
 from scipy.spatial import Voronoi, voronoi_plot_2d
@@ -358,8 +359,8 @@ class PathPlanner:
 
         if plot:
             fig = voronoi_plot_2d(self.voronoi_diagram)
-            plt.ylim([-5, 5])
-            plt.xlim([-5, 5])
+            plt.ylim([-2, 2])
+            plt.xlim([-4, 1])
             plt.show()
 
     def generate_voronoi_graph(self):
@@ -406,6 +407,7 @@ class PathPlanner:
         # Assume robot position is at bottom-center of image
         # TODO: Interpolate bottom 2 points in vertex as robot position?
         # robot_position = np.asarray([320, 480])
+        # Assume robot position is at origin
         robot_position = np.asarray([0, 0])
 
         # Handles special cases: 0 or 1 Voronoi vertices only
@@ -589,8 +591,8 @@ def path_coverage(path, coverage_polygon, yolact_sidewalk, ground_truth):
     :rtype:                  float
     :return coverage:        The coverage ratio [0.0 : 1.0]
     """
-    lookahead = 0.5
-    cover = Polygon(np.asarray([[0.52, 1.08/2], [0.52, -1.08/2], [1.02, -1.84/2], [1.02, 1.84/2]]))
+    lookahead = 1.1
+    cover = Polygon(np.asarray([[0.52, 1.08/2], [0.52, -1.08/2], [0.52+lookahead, -1.84/2], [0.52+lookahead, 1.84/2]]))
     sidewalk_poly = Polygon(ground_truth)
     yolact_poly = Polygon(yolact_sidewalk)
 
@@ -630,27 +632,44 @@ def path_coverage(path, coverage_polygon, yolact_sidewalk, ground_truth):
     sp2 = PolygonPatch(sidewalk_poly, facecolor=(1, 0, 0, 0.3))
     sp3 = PolygonPatch(sidewalk_poly, facecolor=(1, 0, 0, 0.3))
     yp = PolygonPatch(yolact_poly, facecolor=(0, 0.5, 0, 0.3))
-    cp = PolygonPatch(covered_sidewalk, facecolor=(0,0,1,0.3))
+    cp = PolygonPatch(covered_sidewalk, facecolor=(1,0,1,1))
     tcp = PolygonPatch(total_cover, facecolor=(1,0,0,1))
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3,1)
+    fig = plt.figure(constrained_layout=True)
+    spec = matplotlib.gridspec.GridSpec(ncols=2, nrows=2, figure=fig)
+    ax1 = fig.add_subplot(spec[0,0])
+    ax2 = fig.add_subplot(spec[:,1])
+    ax3 = fig.add_subplot(spec[1,0])
+    #fig, (ax1, ax2, ax3) = plt.subplots(3,1)
     ax1.plot([x for x,y in path_points], [y for x,y in path_points], 'blue', linestyle='--')
     ax1.add_patch(sp)
     ax1.add_patch(yp)
     ax1.autoscale_view()
     ax1.set_aspect('equal')
+    ax1.set_title('Ground truth, YOLACT output, planned path')
+    ax1.legend(['Planned path', 'Ground truth', 'YOLACT output'])
+    ax1.set_xlabel('x [m]')
+    ax1.set_ylabel('y [m]')
 
     ax2.plot([x for x, y in path_points], [y for x, y in path_points], 'blue', linestyle='--')
     ax2.add_patch(sp2)
     ax2.add_patch(tcp)
     ax2.autoscale_view()
     ax2.set_aspect('equal')
+    ax2.set_title('Ground truth, total camera coverage, planned path')
+    ax2.legend(['Planned path', 'Ground truth', 'Total coverage'])
+    ax2.set_xlabel('x [m]')
+    ax2.set_ylabel('y [m]')
 
     ax3.plot([x for x, y in path_points], [y for x, y in path_points], 'blue', linestyle='--')
     ax3.add_patch(sp3)
     ax3.add_patch(cp)
     ax3.autoscale_view()
     ax3.set_aspect('equal')
+    ax3.set_title('Ground truth, sidewalk coverage, planned path')
+    ax3.legend(['Planned path', 'Ground truth', 'Sidewalk coverage'])
+    ax3.set_xlabel('x [m]')
+    ax3.set_ylabel('y [m]')
 
     plt.show()
 
