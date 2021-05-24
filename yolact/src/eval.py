@@ -145,6 +145,11 @@ coco_cats = {} # Call prep_coco_cats to fill this
 coco_cats_inv = {}
 color_cache = defaultdict(lambda: {})
 
+
+"""#############################################################################################
+#################################     POINT ALGORITHMS     #####################################
+#############################################################################################"""
+
 def fit_square(points):
     multiplier = 1
     thresh = 0.05
@@ -239,17 +244,17 @@ def get_tile_corners(img_data):
 def find_work_region(mask):
     kernel_size = 30
 
-    lower_line = mask[215]
-    upper_line = mask[215-kernel_size]
+    lower_line = mask[380]
+    upper_line = mask[380-kernel_size]
     lower_idx = np.where(lower_line == 255)
     upper_idx = np.where(upper_line == 255)
 
-    LL = [lower_idx[0][0], 215]
-    LR = [lower_idx[0][len(lower_idx[0])-1], 215]
-    UL = [upper_idx[0][0], 215-kernel_size]
-    UR = [upper_idx[0][len(upper_idx[0])-1], 215-kernel_size]
+    LL = [lower_idx[0][0], 380]
+    LR = [lower_idx[0][len(lower_idx[0])-1], 380]
+    UL = [upper_idx[0][0], 380-kernel_size]
+    UR = [upper_idx[0][len(upper_idx[0])-1], 380-kernel_size]
 
-    work_area = [LL, LR, UL, UR]
+    work_area = [LL, LR, UR, UL]
     return work_area
 
 def tiles_publisher(tiles):
@@ -279,6 +284,10 @@ def workregion_publisher(work_region):
     msg.data = workregion_str
     wr_pub.publish(msg)
 
+    """#############################################################################################
+    ################################################################################################
+    #############################################################################################"""
+
 
 def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, mask_alpha=0.45, fps_str=''):
     """
@@ -300,19 +309,25 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         cfg.rescore_bbox = save
 
 
-    #############################################################
-    ###################### CUSTOM STUFF #########################
-    #############################################################
+    """#############################################################################################
+    ##############################    FIND POINTS FOR MASKS    #####################################
+    #############################################################################################"""
 
     tiles = get_tile_corners(t)
+    print(tiles)
     #print(tiles)
     sidewalk, d_wr = fit_shape(t)
+    print(d_wr)
     #print("Sidewalk: ", sidewalk)
     #print("Depression region", d_wr)
 
     tiles_publisher(tiles)
     sidewalk_publisher(sidewalk)
     workregion_publisher(d_wr)
+
+    """#############################################################################################
+    ################################################################################################
+    #############################################################################################"""
 
 
 
@@ -1213,6 +1228,12 @@ def print_maps(all_maps):
     print(make_sep(len(all_maps['box']) + 1))
     print()
 
+
+
+    """#############################################################################################
+    ##########################    YOLACT CONFIG AND IMAGE CALLBACK     #############################
+    #############################################################################################"""
+
 def evalsidewalk(net:Yolact, frame):
     frame = torch.from_numpy(frame).cuda().float()
     batch = FastBaseTransform()(frame.unsqueeze(0))
@@ -1232,13 +1253,27 @@ def image_callback(data):
     print("Image at: ", time.asctime(time.localtime(time.time())), "| FPS: ", 1/(time.time()-start))
     print()
 
+    """#############################################################################################
+    ################################################################################################
+    #############################################################################################"""
+
 
 if __name__ == '__main__':
     parse_args()
+
+
+    """#############################################################################################
+    ####################################     ROS SETUP     #########################################
+    #############################################################################################"""
     t_pub = rospy.Publisher('tiles', Combined_Tiles, queue_size=10)
     s_pub = rospy.Publisher('sidewalk', String, queue_size=10)
     wr_pub = rospy.Publisher('work_region', String, queue_size=10)
     rospy.init_node('yolact', anonymous=True)
+    """#############################################################################################
+    ################################################################################################
+    #############################################################################################"""
+
+
 
     if args.config is not None:
         set_cfg(args.config)
